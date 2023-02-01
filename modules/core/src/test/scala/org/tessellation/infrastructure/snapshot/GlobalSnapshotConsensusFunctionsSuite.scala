@@ -115,7 +115,21 @@ object GlobalSnapshotConsensusFunctionsSuite extends MutableIOSuite with Checker
   test("validateArtifact - returns artifact for correct data") { res =>
     implicit val (_, ks, sp, m) = res
 
-    val gscf = GlobalSnapshotConsensusFunctions.make(gss, bam, scProcessor, collateral, rewards, env)
+    val gscf = GlobalSnapshotConsensusFunctions.make[F, GlobalSnapshot](
+      bam,
+      scProcessor,
+      collateral,
+      rewards,
+      env,
+      GlobalSnapshotService.make(gss),
+      _.height,
+      _.tips,
+      _.activeTips,
+      _.ordinal,
+      _.blocks,
+      _.stateChannelSnapshots,
+      _.epochProgress
+    )
 
     KeyPairGenerator.makeKeyPair[IO].flatMap { keyPair =>
       val genesis = GlobalSnapshot.mkGenesis(Map.empty, EpochProgress.MinValue)
@@ -136,7 +150,21 @@ object GlobalSnapshotConsensusFunctionsSuite extends MutableIOSuite with Checker
   test("validateArtifact - returns invalid artifact error for incorrect data") { res =>
     implicit val (_, ks, sp, m) = res
 
-    val gscf = GlobalSnapshotConsensusFunctions.make(gss, bam, scProcessor, collateral, rewards, env)
+    val gscf = GlobalSnapshotConsensusFunctions.make[F, GlobalSnapshot](
+      bam,
+      scProcessor,
+      collateral,
+      rewards,
+      env,
+      GlobalSnapshotService.make(gss),
+      _.height,
+      _.tips,
+      _.activeTips,
+      _.ordinal,
+      _.blocks,
+      _.stateChannelSnapshots,
+      _.epochProgress
+    )
 
     KeyPairGenerator.makeKeyPair[IO].flatMap { keyPair =>
       val genesis = GlobalSnapshot.mkGenesis(Map.empty, EpochProgress.MinValue)

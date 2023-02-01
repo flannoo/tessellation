@@ -47,13 +47,20 @@ object GlobalSnapshotConsensus {
     rewards: Rewards[F]
   ): F[Consensus[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact]] =
     Consensus.make[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact](
-      GlobalSnapshotConsensusFunctions.make[F](
-        globalSnapshotStorage,
+      GlobalSnapshotConsensusFunctions.make[F, GlobalSnapshotArtifact](
         BlockAcceptanceManager.make[F](blockValidator),
         GlobalSnapshotStateChannelEventsProcessor.make[F](stateChannelValidator),
         collateral,
         rewards,
-        environment
+        environment,
+        GlobalSnapshotService.make[F](globalSnapshotStorage),
+        _.height,
+        _.tips,
+        _.activeTips,
+        _.ordinal,
+        _.blocks,
+        _.stateChannelSnapshots,
+        _.epochProgress
       ),
       gossip,
       selfId,
