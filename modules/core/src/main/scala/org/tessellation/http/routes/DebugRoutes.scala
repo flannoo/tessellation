@@ -58,7 +58,7 @@ final case class DebugRoutes[F[_]: Async](
   )
 
   object ConsensusResourcesView {
-    def fromResources(resources: ConsensusResources[_]): ConsensusResourcesView = {
+    def fromResources(resources: ConsensusResources[_, _]): ConsensusResourcesView = {
       def peersWithDeclaration(fn: PeerDeclarations => Option[PeerDeclaration]): List[PeerId] =
         resources.peerDeclarationsMap.toList.mapFilter { case (peerId, pds) => fn(pds).map(_ => peerId) }
 

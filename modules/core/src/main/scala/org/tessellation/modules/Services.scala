@@ -93,7 +93,7 @@ sealed abstract class Services[F[_]] private (
   val cluster: Cluster[F],
   val session: Session[F],
   val gossip: Gossip[F],
-  val consensus: Consensus[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact],
+  val consensus: Consensus[F, GlobalSnapshotEvent, GlobalSnapshotKey, GlobalSnapshotArtifact, GlobalSnapshotContext],
   val dag: DAGService[F],
   val collateral: Collateral[F],
   val rewards: Rewards[F],

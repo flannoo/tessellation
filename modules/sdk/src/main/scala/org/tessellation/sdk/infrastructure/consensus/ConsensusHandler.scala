@@ -18,10 +18,10 @@ object ConsensusHandler {
 
   def make[F[
     _
-  ]: Async: SecurityProvider, Event: TypeTag: Decoder, Key: Show: TypeTag: Decoder, Artifact: TypeTag: Decoder](
-    storage: ConsensusStorage[F, Event, Key, Artifact],
-    manager: ConsensusManager[F, Key, Artifact],
-    fns: ConsensusFunctions[F, Event, Key, Artifact]
+  ]: Async: SecurityProvider, Event: TypeTag: Decoder, Key: Show: TypeTag: Decoder, Artifact: TypeTag: Decoder, Context: Decoder](
+    storage: ConsensusStorage[F, Event, Key, Artifact, Context],
+    manager: ConsensusManager[F, Key, Artifact, Context],
+    fns: ConsensusFunctions[F, Event, Key, Artifact, Context]
   ): RumorHandler[F] = {
 
     val eventHandler = RumorHandler.fromPeerRumorConsumer[F, ConsensusEvent[Event]]() { rumor =>
@@ -32,7 +32,7 @@ object ConsensusHandler {
         storage.addEvent(rumor.origin, (rumor.ordinal, rumor.content.value))
     }
 
-    def checkForStateUpdate(key: Key)(maybeResources: Option[ConsensusResources[Artifact]]): F[Unit] =
+    def checkForStateUpdate(key: Key)(maybeResources: Option[ConsensusResources[Artifact, Context]]): F[Unit] =
       maybeResources.traverse(manager.checkForStateUpdate(key)).void
 
     val facilityHandler =

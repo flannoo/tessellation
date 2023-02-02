@@ -18,3 +18,7 @@ case class GlobalSnapshotInfo(
   lastTxRefs: SortedMap[Address, TransactionReference],
   balances: SortedMap[Address, Balance]
 ) extends SnapshotInfo
+
+object GlobalSnapshotInfo {
+  def empty = GlobalSnapshotInfo(SortedMap.empty, SortedMap.empty, SortedMap.empty)
+}

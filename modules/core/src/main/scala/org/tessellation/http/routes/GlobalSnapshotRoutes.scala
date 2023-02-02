@@ -9,7 +9,7 @@ import org.tessellation.ext.codecs.BinaryCodec
 import org.tessellation.ext.http4s.SnapshotOrdinalVar
 import org.tessellation.ext.http4s.headers.negotiation.resolveEncoder
 import org.tessellation.kryo.KryoSerializer
-import org.tessellation.schema.GlobalSnapshot
+import org.tessellation.schema.{GlobalSnapshotInfo, IncrementalGlobalSnapshot}
 import org.tessellation.security.signature.Signed
 
 import io.circe.Encoder
@@ -22,7 +22,7 @@ import shapeless.HNil
 import shapeless.syntax.singleton._
 
 final case class GlobalSnapshotRoutes[F[_]: Async: KryoSerializer](
-  globalSnapshotStorage: SnapshotStorage[F, GlobalSnapshot]
+  globalSnapshotStorage: SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo]
 ) extends Http4sDsl[F] {
   private val prefixPath = "/global-snapshots"
 
@@ -34,21 +34,21 @@ final case class GlobalSnapshotRoutes[F[_]: Async: KryoSerializer](
     case GET -> Root / "latest" / "ordinal" =>
       import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 
-      globalSnapshotStorage.head.map(_.map(_.ordinal)).flatMap {
+      globalSnapshotStorage.headSnapshot.map(_.map(_.ordinal)).flatMap {
         case Some(ordinal) => Ok(("value" ->> ordinal.value.value) :: HNil)
         case None          => NotFound()
       }
 
     case req @ GET -> Root / "latest" =>
-      resolveEncoder[F, Signed[GlobalSnapshot]](req) { implicit enc =>
-        globalSnapshotStorage.head.flatMap {
+      resolveEncoder[F, Signed[IncrementalGlobalSnapshot]](req) { implicit enc =>
+        globalSnapshotStorage.headSnapshot.flatMap {
           case Some(snapshot) => Ok(snapshot)
           case _              => NotFound()
         }
       }
 
     case req @ GET -> Root / SnapshotOrdinalVar(ordinal) =>
-      resolveEncoder[F, Signed[GlobalSnapshot]](req) { implicit enc =>
+      resolveEncoder[F, Signed[IncrementalGlobalSnapshot]](req) { implicit enc =>
         globalSnapshotStorage.get(ordinal).flatMap {
           case Some(snapshot) => Ok(snapshot)
           case _              => NotFound()

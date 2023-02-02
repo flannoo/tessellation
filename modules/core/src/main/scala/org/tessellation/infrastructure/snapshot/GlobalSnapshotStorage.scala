@@ -21,7 +21,7 @@ import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.Balance
-import org.tessellation.schema.{GlobalSnapshot, SnapshotOrdinal}
+import org.tessellation.schema.{GlobalSnapshotInfo, IncrementalGlobalSnapshot, SnapshotOrdinal}
 import org.tessellation.sdk.domain.collateral.LatestBalances
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.signature.Signed
@@ -36,9 +36,9 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 object GlobalSnapshotStorage {
 
   private def makeResources[F[_]: Async]() = {
-    def mkHeadRef = SignallingRef.of[F, Option[Signed[GlobalSnapshot]]](none)
+    def mkHeadRef = SignallingRef.of[F, Option[(Signed[IncrementalGlobalSnapshot], GlobalSnapshotInfo)]](none)
     def mkOrdinalCache = MapRef.ofSingleImmutableMap[F, SnapshotOrdinal, Hash](Map.empty)
-    def mkHashCache = MapRef.ofSingleImmutableMap[F, Hash, Signed[GlobalSnapshot]](Map.empty)
+    def mkHashCache = MapRef.ofSingleImmutableMap[F, Hash, Signed[IncrementalGlobalSnapshot]](Map.empty)
     def mkNotPersistedCache = Ref.of(Set.empty[SnapshotOrdinal])
     def mkOffloadQueue = Queue.unbounded[F, SnapshotOrdinal]
 
@@ -53,7 +53,7 @@ object GlobalSnapshotStorage {
     globalSnapshotLocalFileSystemStorage: GlobalSnapshotLocalFileSystemStorage[F],
     inMemoryCapacity: NonNegLong,
     maybeRollbackHash: Option[Hash]
-  ): F[SnapshotStorage[F, GlobalSnapshot] with LatestBalances[F]] =
+  ): F[SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo] with LatestBalances[F]] =
     maybeRollbackHash match {
       case Some(rollbackHash) =>
         GlobalSnapshotStorage
@@ -67,7 +67,7 @@ object GlobalSnapshotStorage {
     globalSnapshotLocalFileSystemStorage: GlobalSnapshotLocalFileSystemStorage[F],
     inMemoryCapacity: NonNegLong,
     rollbackHash: Hash
-  ): F[SnapshotStorage[F, GlobalSnapshot] with LatestBalances[F]] =
+  ): F[SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo] with LatestBalances[F]] =
     globalSnapshotLocalFileSystemStorage
       .read(rollbackHash)
       .flatMap(ApplicativeError.liftFromOption(_, new Throwable("Rollback global snapshot not found!")))
@@ -76,7 +76,7 @@ object GlobalSnapshotStorage {
           case (headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, logger) =>
             implicit val l = logger
 
-            headRef.set(rollbackSnapshot.some) >>
+            headRef.set((rollbackSnapshot, GlobalSnapshotInfo.empty).some) >> // TODO - incremental snapshots - rollback case
               ordinalCache(rollbackSnapshot.ordinal).set(rollbackHash.some) >>
               hashCache(rollbackHash).set(rollbackSnapshot.some) >>
               make(
@@ -94,21 +94,21 @@ object GlobalSnapshotStorage {
   private def make[F[_]: Async: KryoSerializer](
     globalSnapshotLocalFileSystemStorage: GlobalSnapshotLocalFileSystemStorage[F],
     inMemoryCapacity: NonNegLong
-  )(implicit S: Supervisor[F]): F[SnapshotStorage[F, GlobalSnapshot] with LatestBalances[F]] =
+  )(implicit S: Supervisor[F]): F[SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo] with LatestBalances[F]] =
     makeResources().flatMap {
       case (headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, _) =>
         make(headRef, ordinalCache, hashCache, notPersistedCache, offloadQueue, globalSnapshotLocalFileSystemStorage, inMemoryCapacity)
     }
 
   def make[F[_]: Async: KryoSerializer](
-    headRef: SignallingRef[F, Option[Signed[GlobalSnapshot]]],
+    headRef: SignallingRef[F, Option[(Signed[IncrementalGlobalSnapshot], GlobalSnapshotInfo)]],
     ordinalCache: MapRef[F, SnapshotOrdinal, Option[Hash]],
-    hashCache: MapRef[F, Hash, Option[Signed[GlobalSnapshot]]],
+    hashCache: MapRef[F, Hash, Option[Signed[IncrementalGlobalSnapshot]]],
     notPersistedCache: Ref[F, Set[SnapshotOrdinal]],
     offloadQueue: Queue[F, SnapshotOrdinal],
     globalSnapshotLocalFileSystemStorage: GlobalSnapshotLocalFileSystemStorage[F],
     inMemoryCapacity: NonNegLong
-  )(implicit S: Supervisor[F]): F[SnapshotStorage[F, GlobalSnapshot] with LatestBalances[F]] = {
+  )(implicit S: Supervisor[F]): F[SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo] with LatestBalances[F]] = {
 
     def logger = Slf4jLogger.getLogger[F]
 
@@ -161,7 +161,7 @@ object GlobalSnapshotStorage {
         .compile
         .drain
 
-    def enqueue(snapshot: Signed[GlobalSnapshot]) =
+    def enqueue(snapshot: Signed[IncrementalGlobalSnapshot]) =
       snapshot.value.hashF.flatMap { hash =>
         hashCache(hash).set(snapshot.some) >>
           ordinalCache(snapshot.ordinal).set(hash.some) >>
@@ -175,21 +175,26 @@ object GlobalSnapshotStorage {
       }
 
     S.supervise(offloadProcess).map { _ =>
-      new SnapshotStorage[F, GlobalSnapshot] with LatestBalances[F] {
-        def prepend(snapshot: Signed[GlobalSnapshot]): F[Boolean] =
+      new SnapshotStorage[F, IncrementalGlobalSnapshot, GlobalSnapshotInfo] with LatestBalances[F] {
+        def prepend(snapshot: Signed[IncrementalGlobalSnapshot]): F[Boolean] = ???
+
+        def prepend(snapshot: Signed[IncrementalGlobalSnapshot], initialState: GlobalSnapshotInfo): F[Boolean] =
           headRef.modify {
             case None =>
-              (snapshot.some, enqueue(snapshot).map(_ => true))
-            case Some(current) =>
+              (
+                (snapshot, GlobalSnapshotInfo.empty).some,
+                enqueue(snapshot).map(_ => true)
+              ) // TODO - incremental snapshots - calculate state
+            case Some((current, state)) =>
               isNextSnapshot(current, snapshot) match {
                 case Left(e) =>
-                  (current.some, e.raiseError[F, Boolean])
+                  ((current, state).some, e.raiseError[F, Boolean])
                 case Right(isNext) if isNext =>
-                  (snapshot.some, enqueue(snapshot).map(_ => true))
+                  ((snapshot, GlobalSnapshotInfo.empty).some, enqueue(snapshot).map(_ => true))
 
                 case _ =>
                   (
-                    current.some,
+                    (current, state).some,
                     logger
                       .debug(s"Trying to prepend ${snapshot.ordinal.show} but the current snapshot is: ${current.ordinal.show}")
                       .as(false)
@@ -197,7 +202,8 @@ object GlobalSnapshotStorage {
               }
           }.flatten
 
-        def head: F[Option[Signed[GlobalSnapshotArtifact]]] = headRef.get
+        def head: F[Option[(Signed[GlobalSnapshotArtifact], GlobalSnapshotInfo)]] = headRef.get
+        def headSnapshot: F[Option[Signed[GlobalSnapshotArtifact]]] = headRef.get.map(_.map(_._1))
 
         def get(ordinal: SnapshotOrdinal): F[Option[Signed[GlobalSnapshotArtifact]]] =
           ordinalCache(ordinal).get.flatMap {
@@ -212,16 +218,17 @@ object GlobalSnapshotStorage {
           }
 
         def getLatestBalances: F[Option[Map[Address, Balance]]] =
-          head.map(_.map(_.info.balances))
+          headRef.get.map(_.map(_._2.balances))
 
         def getLatestBalancesStream: Stream[F, Map[Address, Balance]] =
           headRef.discrete
-            .flatMap(_.fold[Stream[F, Signed[GlobalSnapshotArtifact]]](Stream.empty)(Stream(_)))
-            .map(_.info.balances)
+            .map(_.map(_._2))
+            .flatMap(_.fold[Stream[F, GlobalSnapshotInfo]](Stream.empty)(Stream(_)))
+            .map(_.balances)
 
         private def isNextSnapshot(
-          current: Signed[GlobalSnapshot],
-          snapshot: Signed[GlobalSnapshot]
+          current: Signed[IncrementalGlobalSnapshot],
+          snapshot: Signed[IncrementalGlobalSnapshot]
         ): Either[Throwable, Boolean] =
           current.value.hash.map { hash =>
             hash === snapshot.value.lastSnapshotHash && current.value.ordinal.next === snapshot.value.ordinal

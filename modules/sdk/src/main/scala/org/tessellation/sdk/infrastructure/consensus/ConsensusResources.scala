@@ -10,14 +10,15 @@ import derevo.derive
 /** Represents various data collected from other peers
   */
 @derive(eqv, show)
-case class ConsensusResources[A](
+case class ConsensusResources[A, C](
   peerDeclarationsMap: Map[PeerId, PeerDeclarations],
   acksMap: Map[(PeerId, PeerDeclarationKind), Set[PeerId]],
   withdrawalsMap: Map[PeerId, PeerDeclarationKind],
   ackKinds: Set[PeerDeclarationKind],
-  artifacts: Map[Hash, A]
+  artifacts: Map[Hash, A],
+  contexts: Map[Hash, C]
 )
 
 object ConsensusResources {
-  def empty[A]: ConsensusResources[A] = ConsensusResources(Map.empty, Map.empty, Map.empty, Set.empty, Map.empty)
+  def empty[A, C]: ConsensusResources[A, C] = ConsensusResources(Map.empty, Map.empty, Map.empty, Set.empty, Map.empty, Map.empty)
 }

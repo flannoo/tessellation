@@ -20,9 +20,10 @@ object UnlockConsensusUpdateSuite extends SimpleIOSuite with Checkers {
 
   type Key = Int
   type Artifact = Unit
+  type Context = Unit
 
-  val unlockConsensusFn: ConsensusStateUpdateFn[UnlockConsensusUpdateSuite.F, Key, Artifact, Artifact] =
-    UnlockConsensusUpdate.make[F, Key, Artifact]
+  val unlockConsensusFn: ConsensusStateUpdateFn[UnlockConsensusUpdateSuite.F, Key, Artifact, Artifact, Context] =
+    UnlockConsensusUpdate.make[F, Key, Artifact, Context]
 
   override def checkConfig: CheckConfig = CheckConfig.default.copy(minimumSuccessful = 40)
 
@@ -56,7 +57,7 @@ object UnlockConsensusUpdateSuite extends SimpleIOSuite with Checkers {
     }
   }
 
-  def lockedStateAndResourcesGen: Gen[(ConsensusState[Key, Artifact], ConsensusResources[Artifact])] =
+  def lockedStateAndResourcesGen: Gen[(ConsensusState[Key, Artifact, Context], ConsensusResources[Artifact, Context])] =
     for {
       facilitators <- facilitatorsGen
       state <- lockedStateGen(facilitators)
@@ -70,19 +71,21 @@ object UnlockConsensusUpdateSuite extends SimpleIOSuite with Checkers {
       .flatMap(size => Gen.containerOfN[Set, PeerId](size, arbitrary[PeerId]))
       .map(_.toList.sorted)
 
-  def lockedStateGen(facilitators: List[PeerId]): Gen[ConsensusState[Key, Artifact]] =
+  def lockedStateGen(facilitators: List[PeerId]): Gen[ConsensusState[Key, Artifact, Context]] =
     for {
       key <- arbitrary[Key]
       lastKey <- arbitrary[Key]
       createdAt <- arbitrary[FiniteDuration]
       lastSignedArtifact <- arbitrary[Signed[Artifact]]
+      lastContext <- arbitrary[Context]
       facilitatorsHash <- arbitrary[Hash]
     } yield
       ConsensusState(
         key = key,
         lastKey = lastKey,
+        context = lastContext,
         facilitators = facilitators,
-        status = CollectingFacilities(none, lastSignedArtifact, facilitatorsHash),
+        status = CollectingFacilities(none, lastSignedArtifact, lastContext, facilitatorsHash),
         createdAt = createdAt,
         lockStatus = Closed
       )
@@ -92,10 +95,11 @@ object UnlockConsensusUpdateSuite extends SimpleIOSuite with Checkers {
       facilitators.map(peerId => (peerId, kind.Facility)).zip(acksSet).toMap
     }
 
-  def resourcesGen(acksMap: Map[(PeerId, PeerDeclarationKind), Set[PeerId]]): Gen[ConsensusResources[Artifact]] =
+  def resourcesGen(acksMap: Map[(PeerId, PeerDeclarationKind), Set[PeerId]]): Gen[ConsensusResources[Artifact, Context]] =
     for {
       peerDeclarations <- arbitrary[Map[PeerId, PeerDeclarations]]
       artifacts <- arbitrary[Map[Hash, Artifact]]
+      contexts <- arbitrary[Map[Hash, Context]]
       withdrawals <- arbitrary[Map[PeerId, PeerDeclarationKind]]
     } yield
       ConsensusResources(
@@ -103,7 +107,8 @@ object UnlockConsensusUpdateSuite extends SimpleIOSuite with Checkers {
         acksMap = acksMap,
         withdrawalsMap = withdrawals,
         ackKinds = Set(kind.Facility),
-        artifacts = artifacts
+        artifacts = artifacts,
+        contexts = contexts
       )
 
 }

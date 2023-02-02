@@ -9,7 +9,7 @@ import cats.syntax.functor._
 
 import org.tessellation.ext.crypto._
 import org.tessellation.kryo.KryoSerializer
-import org.tessellation.schema.{GlobalSnapshot, SnapshotOrdinal}
+import org.tessellation.schema.{IncrementalGlobalSnapshot, SnapshotOrdinal}
 import org.tessellation.security.hash.Hash
 import org.tessellation.security.signature.Signed
 import org.tessellation.storage.LocalFileSystemStorage
@@ -19,9 +19,9 @@ import fs2.io.file.Path
 import io.estatico.newtype.ops._
 
 final class GlobalSnapshotLocalFileSystemStorage[F[_]: Async: KryoSerializer] private (path: Path)
-    extends LocalFileSystemStorage[F, Signed[GlobalSnapshot]](path) {
+    extends LocalFileSystemStorage[F, Signed[IncrementalGlobalSnapshot]](path) {
 
-  def write(snapshot: Signed[GlobalSnapshot]): F[Unit] = {
+  def write(snapshot: Signed[IncrementalGlobalSnapshot]): F[Unit] = {
     val ordinalName = toOrdinalName(snapshot.value)
 
     toHashName(snapshot.value).flatMap { hashName =>
@@ -37,16 +37,16 @@ final class GlobalSnapshotLocalFileSystemStorage[F[_]: Async: KryoSerializer] pr
 
   }
 
-  def read(ordinal: SnapshotOrdinal): F[Option[Signed[GlobalSnapshot]]] =
+  def read(ordinal: SnapshotOrdinal): F[Option[Signed[IncrementalGlobalSnapshot]]] =
     read(toOrdinalName(ordinal))
 
-  def read(hash: Hash): F[Option[Signed[GlobalSnapshot]]] =
+  def read(hash: Hash): F[Option[Signed[IncrementalGlobalSnapshot]]] =
     read(hash.coerce[String])
 
-  private def toOrdinalName(snapshot: GlobalSnapshot): String = toOrdinalName(snapshot.ordinal)
+  private def toOrdinalName(snapshot: IncrementalGlobalSnapshot): String = toOrdinalName(snapshot.ordinal)
   private def toOrdinalName(ordinal: SnapshotOrdinal): String = ordinal.value.value.toString
 
-  private def toHashName(snapshot: GlobalSnapshot): F[String] = snapshot.hashF.map(_.coerce[String])
+  private def toHashName(snapshot: IncrementalGlobalSnapshot): F[String] = snapshot.hashF.map(_.coerce[String])
 
 }
 

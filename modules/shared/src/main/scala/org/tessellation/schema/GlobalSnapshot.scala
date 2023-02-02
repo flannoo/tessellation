@@ -4,6 +4,7 @@ import cats.data.NonEmptyList
 
 import scala.collection.immutable.{SortedMap, SortedSet}
 
+import org.tessellation.ext.cats.syntax.next.catsSyntaxNext
 import org.tessellation.schema.address.Address
 import org.tessellation.schema.balance.Balance
 import org.tessellation.schema.block.DAGBlock
@@ -12,6 +13,7 @@ import org.tessellation.schema.height.{Height, SubHeight}
 import org.tessellation.schema.peer.PeerId
 import org.tessellation.schema.snapshot.Snapshot
 import org.tessellation.schema.transaction.{DAGTransaction, RewardTransaction}
+import org.tessellation.security.Hashed
 import org.tessellation.security.hash.{Hash, ProofsHash}
 import org.tessellation.security.hex.Hex
 import org.tessellation.security.signature.Signed
@@ -36,7 +38,7 @@ case class IncrementalGlobalSnapshot(
   epochProgress: EpochProgress,
   nextFacilitators: NonEmptyList[PeerId],
   tips: SnapshotTips
-  // TODO: state hash
+  // TODO: incremental snapshots - state hash
 ) extends Snapshot[DAGTransaction, DAGBlock] {
   def fromGlobalSnapshot(gs: GlobalSnapshot) =
     IncrementalGlobalSnapshot(
@@ -101,6 +103,20 @@ object GlobalSnapshot {
         SortedSet.empty[DeprecatedTip],
         mkActiveTips(8)
       )
+    )
+
+  def mkFirstIncrementalSnapshot(genesis: Hashed[GlobalSnapshot]): IncrementalGlobalSnapshot =
+    IncrementalGlobalSnapshot(
+      genesis.ordinal.next,
+      genesis.height,
+      genesis.subHeight.next,
+      genesis.hash,
+      SortedSet.empty,
+      SortedMap.empty,
+      SortedSet.empty,
+      genesis.epochProgress.next,
+      nextFacilitators,
+      genesis.tips
     )
 
   val nextFacilitators: NonEmptyList[PeerId] =
