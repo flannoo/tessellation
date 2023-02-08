@@ -17,6 +17,12 @@ trait ConsensusFunctions[F[_], Event, Key, Artifact, Context] {
     artifact: Artifact
   ): F[Either[InvalidArtifact, Artifact]]
 
+  def createGlobalSnapshotInfo(
+    lastSnapshotContext: Context,
+    lastSnapshot: Artifact,
+    snapshot: Artifact
+  ): F[Context]
+
   def createProposalArtifact(
     lastKey: Key,
     lastArtifact: Signed[Artifact],
